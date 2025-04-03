@@ -23,6 +23,19 @@ function setupEventListeners() {
     }
 }
 
+
+// iOS detection and optimization
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+if (isIOS) {
+    console.log("iOS detected — enabling mobile-safe optimizations");
+    const canvas = document.querySelector("#unity-canvas");
+    if (canvas) {
+        canvas.width = window.innerWidth / 1.5;
+        canvas.height = window.innerHeight / 1.5;
+    }
+}
+
+
 window.addEventListener("load", function () {
     console.log("sns_custom.js: Page loaded! Initializing recorder");
     const canvas = document.querySelector("#unity-canvas");
@@ -67,7 +80,7 @@ window.addEventListener("load", function () {
         recorder.onComplete.bind(async (res) => {
            ZapparSharing({
                 data: await res.asDataURL(),
-                fileNamePrepend: 'ChineseWokAR',
+                fileNamePrepend: 'WeWorkSticker',
                 shareTitle: 'Check out my Video',
                 shareText: 'Recorded using FilterYouAR',
               },
@@ -124,7 +137,7 @@ window.addEventListener("zappar-sns-ready", function () {
                 if (saveButton) {
                     console.log("Save button found!");
                     saveButton.removeAttribute('download');
-                    saveButton.setAttribute('download', 'ChineseWokAR.mp4');
+                    saveButton.setAttribute('download', 'WeWorkSticker.mp4');
                     console.log("Save button download attribute set to MyCustomVideoName.mp4");
                     observer.disconnect();
                 }
@@ -146,15 +159,6 @@ function startRecording() {
             console.error("Could not find the recordButton to set the recording style");
          }
         updateProgress();
-        
-    // Send Message to Unity to activate a button
-    if (window.unityInstance) {
-        window.unityInstance.SendMessage('ARCamera', 'OnStartRecording');
-        console.log("Sent 'OnStartRecording' message to Unity");
-    }
-    else {
-        console.error("Could not find the Unity Instance to send 'OnStartRecording' message");
-    }
         recorder.start();
     } else {
         console.error("Recorder not ready yet")
@@ -162,6 +166,15 @@ function startRecording() {
 }
 
 function stopRecording() {
+// Clean up unused camera stream if needed
+const videoEl = document.getElementById("webcam-video");
+if (videoEl && videoEl.srcObject) {
+    const tracks = videoEl.srcObject.getTracks();
+    tracks.forEach(track => track.stop());
+    videoEl.srcObject = null;
+    restartWebcam();
+}
+
     if (recorder) {
         console.log("Stopping video recording without custom audio");
         recording = false;
@@ -176,13 +189,6 @@ function stopRecording() {
              circle.style.strokeDashoffset = circle.getAttribute('r') * 2 * Math.PI;
         } else {
             console.error("Could not find the progress-ring__bar to reset the offset")
-        }
-        if (window.unityInstance) {
-            window.unityInstance.SendMessage('ARCamera', 'OnStopRecording');
-            console.log("Sent 'OnStopRecording' message to Unity");
-        }
-        else {
-            console.error("Could not find the Unity Instance to send 'OnStopRecording' message");
         }
 
         recorder.stop();
@@ -213,4 +219,52 @@ function updateProgress() {
          }
 
     }
+}
+
+
+function restartWebcam() {
+    const videoEl = document.getElementById("webcam-video");
+    if (!videoEl) return;
+
+    navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+        .then(stream => {
+            videoEl.srcObject = stream;
+            videoEl.play();
+            console.log("Webcam restarted");
+        })
+        .catch(err => {
+            console.error("Failed to restart webcam:", err);
+        });
+}
+
+function restartWebcam() {
+    const videoEl = document.getElementById("webcam-video");
+    if (!videoEl) return;
+
+    navigator.mediaDevices.getUserMedia({
+        video: {
+            facingMode: { ideal: "environment" } // Prefer rear camera
+        },
+        audio: false
+    })
+    .then(stream => {
+        const videoTrack = stream.getVideoTracks()[0];
+        const settings = videoTrack.getSettings();
+
+        console.log("Camera label:", videoTrack.label);
+        console.log("Camera facing mode (if available):", settings.facingMode);
+
+        videoEl.srcObject = stream;
+        videoEl.play();
+
+        // Optional: warn user if wrong cam was selected
+        if (settings.facingMode && settings.facingMode === "user") {
+            alert("Front camera selected. Please switch to rear camera manually.");
+        }
+
+        console.log("Webcam restarted with preferred rear camera.");
+    })
+    .catch(err => {
+        console.error("Failed to restart webcam:", err);
+    });
 }
